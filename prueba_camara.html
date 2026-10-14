@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prueba de cámara</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: grid; place-items: center;
+      padding: 20px; font-family: Arial, sans-serif; color: white;
+      background: #101827;
+    }
+    .panel {
+      width: 100%; max-width: 500px; padding: 24px; text-align: center;
+      background: #1e293b; border-radius: 18px;
+    }
+    h1 { color: #60a5fa; }
+    video {
+      width: 100%; aspect-ratio: 4 / 3; object-fit: cover;
+      background: #05080e; border-radius: 12px; margin: 15px 0;
+    }
+    button {
+      padding: 12px 16px; margin: 5px; border: 0; border-radius: 8px;
+      color: white; background: #2563eb; cursor: pointer;
+    }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    #status { color: #cbd5e1; font-size: 14px; }
+    .indicator {
+      display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+      background: #64748b; margin-right: 6px;
+    }
+    .active { background: #22c55e; }
+  </style>
+</head>
+<body>
+  <main class="panel">
+    <h1>Prueba de cámara</h1>
+    <p>Autoriza el acceso a la cámara cuando tu navegador lo solicite.</p>
+    <video id="camera" autoplay playsinline muted></video>
+    <p>
+      <span id="indicator" class="indicator"></span>
+      <span id="status" role="status" aria-live="polite">Cámara apagada</span>
+    </p>
+    <button id="start">Abrir cámara</button>
+    <button id="stop" disabled>Detener cámara</button>
+  </main>
+
+  <script>
+    const video = document.getElementById("camera");
+    const startButton = document.getElementById("start");
+    const stopButton = document.getElementById("stop");
+    const status = document.getElementById("status");
+    const indicator = document.getElementById("indicator");
+
+    let stream = null;
+    let requestId = 0;
+
+    async function openCamera() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        status.textContent = "Usa HTTPS o localhost para acceder a la cámara.";
+        return;
+      }
+
+      const id = ++requestId;
+      startButton.disabled = true;
+      status.textContent = "Esperando autorización...";
+
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false
+        });
+
+        if (id !== requestId) {
+          newStream.getTracks().forEach(track => track.stop());
+          return;
+        }
+
+        stream = newStream;
+        video.srcObject = stream;
+        await video.play();
+
+        indicator.classList.add("active");
+        status.textContent = "Cámara activa";
+        stopButton.disabled = false;
+
+        stream.getVideoTracks()[0].addEventListener("ended", () => {
+          if (id !== requestId) return;
+          stopCamera("La cámara se ha desconectado.");
+        }, { once: true });
+
+      } catch (error) {
+        if (id !== requestId) return;
+
+        const messages = {
+          NotAllowedError: "Permiso de cámara denegado.",
+          NotFoundError: "No se encontró ninguna cámara.",
+          NotReadableError: "La cámara está ocupada o no disponible."
+        };
+
+        status.textContent = messages[error.name] || "No se pudo abrir la cámara.";
+        startButton.disabled = false;
+      }
+    }
+
+    function stopCamera(message = "Cámara apagada") {
+      ++requestId;
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+      }
+      video.srcObject = null;
+      indicator.classList.remove("active");
+      status.textContent = message;
+      startButton.disabled = false;
+      stopButton.disabled = true;
+    }
+
+    startButton.addEventListener("click", openCamera);
+    stopButton.addEventListener("click", () => stopCamera());
+    // No detenemos la cámara simplemente por cambiar de pestaña.
+  </script>
+</body>
+</html>
